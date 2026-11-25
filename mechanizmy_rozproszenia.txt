@@ -1,7 +1,3 @@
-MECHANIZMY ROZPROSZENIA – opisy usunięte z aplikacji Streamlit
-(wcześniej rozwijane panele „Mechanizm rozproszenia: ...” w app/main.py)
-==========================================================================
-
 1. Autonomia węzłów  [ekran: Pulpit]
 --------------------------------------------------------------------------
 Każda baza działa samodzielnie. Aplikacja łączy się osobno z Oracle i z SQL
