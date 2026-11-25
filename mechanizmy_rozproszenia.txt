@@ -1,0 +1,85 @@
+MECHANIZMY ROZPROSZENIA – opisy usunięte z aplikacji Streamlit
+(wcześniej rozwijane panele „Mechanizm rozproszenia: ...” w app/main.py)
+==========================================================================
+
+1. Autonomia węzłów  [ekran: Pulpit]
+--------------------------------------------------------------------------
+Każda baza działa samodzielnie. Aplikacja łączy się osobno z Oracle i z SQL
+Serverem, z 3-sekundowym limitem czasu. Gdy jeden węzeł padnie, jego kafelek
+robi się czerwony, a drugi sklep dalej sprzedaje, rezerwuje i przyjmuje towar.
+
+
+2. Relacja globalna z fragmentów  [ekran: Produkty w sieci]
+--------------------------------------------------------------------------
+Tabela stany_magazynowe jest podzielona poziomo: wiersze Wrocławia są w Oracle,
+wiersze Warszawy w SQL Serverze. Ten ekran składa oba fragmenty w jedną
+„globalną” tabelę – tak jak widok dbo.v_dostepnosc_globalna (UNION ALL)
+w SQL Serverze. Dzięki temu widać różne ceny tego samego produktu.
+
+
+3. Fragmentacja pozioma pierwotna i pochodna  [ekran: Sprzedaż]
+--------------------------------------------------------------------------
+Zamówienie zapisuje się tylko w bazie mojego sklepu – to fragment tabeli
+zamowienia wyznaczony warunkiem sklep = 'WRO' / 'WAW' (fragmentacja pierwotna).
+Pozycje zamówienia idą za zamówieniem do tej samej bazy (fragmentacja pochodna).
+Zmiana stanu, zamówienie i pozycja to jedna lokalna transakcja; warunek
+ilosc_dostepna >= n w UPDATE nie pozwala sprzedać więcej, niż jest.
+
+
+4. Zapis w węźle, który ma dane  [ekran: Rezerwacje → Nowa rezerwacja]
+--------------------------------------------------------------------------
+Rezerwacja trafia do bazy sklepu, w którym leży towar – także gdy składa ją
+drugi sklep. Zmniejszenie stanu i zapis rezerwacji to wtedy jedna lokalna
+transakcja w jednej bazie, bez transakcji rozproszonej. Kolumna sklep_zlecajacy
+pamięta, kto złożył rezerwację. Warunek ilosc_dostepna >= n w UPDATE + blokada
+wiersza sprawiają, że z dwóch równoczesnych prób o ostatnią sztukę wygrywa
+dokładnie jedna (test: python app/test_wspolbieznosc.py).
+
+
+5. Fragmentacja pozioma  [ekran: Magazyn → Przyjęcie towaru]
+--------------------------------------------------------------------------
+Stany i ceny są lokalne: przyjęcie towaru zmienia tylko fragment
+stany_magazynowe w bazie danego sklepu. Ten sam produkt z katalogu może mieć
+w każdym sklepie inną cenę i ilość, albo być tylko w jednym sklepie.
+
+
+6. Zapis w dwóch węzłach + kompensacja  [ekran: Magazyn → Przekazanie]
+--------------------------------------------------------------------------
+To jedyna operacja, która zmienia dane w dwóch bazach: −n w sklepie
+wysyłającym, +n w sklepie odbierającym. Oracle i SQL Server nie mają wspólnej
+transakcji, więc zamiast protokołu 2PC są dwie lokalne transakcje:
+  1. zdjęcie towaru u mnie (commit),
+  2. dodanie towaru w drugim sklepie (commit).
+Jeśli krok 2 się nie uda (np. drugi węzeł nie działa), wykonywana jest
+kompensacja: towar wraca do mojego magazynu. Między krokami towar jest przez
+chwilę „w drodze” – to cena za brak transakcji rozproszonej.
+Test: zatrzymaj drugi węzeł i spróbuj przekazać towar.
+
+
+7. Replikacja master → kopia  [ekran: Katalog sieci]
+--------------------------------------------------------------------------
+kategorie i typy_produktow są replikowane: oryginał (master) jest tylko
+w Oracle we Wrocławiu, a SQL Server w Warszawie ma kopię. Procedura
+dbo.sp_synchronizuj_katalog pobiera migawkę katalogu z Oracle przez Linked
+Server i w jednej transakcji nanosi zmiany (MERGE). Uruchamia ją co 5 minut
+SQL Server Agent albo przycisk w aplikacji. Gdy Oracle nie odpowiada, kopia
+zostaje nietknięta, a błąd trafia do dziennika. Jeden master = brak konfliktów
+(dwóch różnych produktów o tym samym ID).
+
+
+8. Zapytanie rozproszone z agregacją  [ekran: Raporty]
+--------------------------------------------------------------------------
+Procedura dbo.sp_raport_dzienny działa w SQL Serverze: sprzedaż Warszawy liczy
+lokalnie, a sprzedaż Wrocławia zleca do Oracle (EXEC (...) AT ORACLE_WRO) –
+Oracle sam liczy sumę i odsyła tylko jeden wiersz. Wynik zapisuje się
+w raporty_dzienne, która istnieje tylko w SQL Serverze. Gdy Oracle nie działa,
+raport powstaje z samej Warszawy.
+
+
+9. OPENQUERY a nazwa czteroczłonowa  [ekran: Rozproszenie → Wydajność]
+--------------------------------------------------------------------------
+OPENQUERY wysyła całe zapytanie do Oracle – Oracle je wykonuje i odsyła tylko
+wynik. Przy nazwie czteroczłonowej (ORACLE_WRO..SKLEP_WRO.TABELA) SQL Server
+sam planuje zapytanie i często ściąga więcej danych, żeby przetworzyć je
+u siebie. Przy małych tabelach różnica jest niewielka, przy dużych
+i z filtrami – wyraźna.
