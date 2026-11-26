@@ -1,0 +1,298 @@
+\documentclass[11pt,a4paper]{article}
+
+% Kodowanie i język
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[polish]{babel}
+\usepackage{lmodern}
+
+% Układ strony
+\usepackage[a4paper,hmargin=2.2cm,vmargin=2cm]{geometry}
+\usepackage{microtype}
+\usepackage{booktabs,tabularx,array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{positioning,fit,shapes.multipart,arrows.meta}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{akcent}{HTML}{23476A}
+
+% Akapity i odstępy
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\linespread{1.05}
+\renewcommand{\arraystretch}{1.12}
+
+% Listy
+\setlist[itemize]{leftmargin=1.5em,topsep=2pt,itemsep=1pt,parsep=0pt}
+\setlist[enumerate]{leftmargin=1.6em,topsep=2pt,itemsep=1pt,parsep=0pt}
+
+% Nagłówki sekcji: kolor akcentu, linia pod spodem
+\titleformat{\section}
+  {\large\bfseries\color{akcent}}{\thesection.}{0.5em}{}[{\color{akcent!40}\titlerule}]
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titleformat{\subsection}{\normalsize\bfseries\color{akcent}}{\thesubsection.}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{6pt}{2pt}
+
+% Znacznik miejsc do uzupełnienia
+\newcommand{\douzup}[1]{\textcolor{red!75!black}{\textbf{[DO UZUPEŁNIENIA: #1]}}}
+
+% Style rysunków
+\tikzset{
+  encja/.style={rectangle split, rectangle split parts=2, draw=akcent,
+    rectangle split part fill={akcent,white}, text width=3.3cm, anchor=north,
+    font=\scriptsize\ttfamily, align=left, inner sep=2.5pt, rounded corners=1.5pt},
+  replika/.style={encja, rectangle split part fill={akcent!55,white}},
+  blok/.style={draw=akcent, fill=akcent!8, rounded corners=3pt, align=center,
+    font=\small, inner sep=5pt, minimum width=4.4cm},
+  rel/.style={draw=akcent!70, thick},
+  krt/.style={font=\scriptsize\sffamily, text=akcent},
+}
+\newcommand{\pk}{\hfill{\sffamily\tiny\color{akcent}PK}}
+\newcommand{\fk}{\hfill{\sffamily\tiny\color{gray}FK}}
+\newcommand{\pkfk}{\hfill{\sffamily\tiny\color{akcent}PK\color{gray}, FK}}
+\newcommand{\naglowek}[1]{\textcolor{white}{\normalfont\bfseries\footnotesize #1}}
+
+\begin{document}
+
+% ============================================
+% STRONA TYTUŁOWA
+% ============================================
+\begin{titlepage}
+\centering
+\vspace*{1.5cm}
+{\large\bfseries POLITECHNIKA WROCŁAWSKA\par}
+\vspace{0.3cm}
+{\normalsize Kierunek: Informatyczne Systemy Automatyki, studia II stopnia\par}
+
+\vspace{4cm}
+{\color{akcent}\rule{0.6\textwidth}{0.8pt}\par}
+\vspace{0.6cm}
+{\Huge\bfseries\color{akcent} Rozproszone bazy danych\par}
+\vspace{0.6cm}
+{\LARGE Aplikacja bazodanowa do obsługi sieci sklepów\par}
+\vspace{0.4cm}
+{\large Sprawozdanie z projektu\par}
+\vspace{0.6cm}
+{\color{akcent}\rule{0.6\textwidth}{0.8pt}\par}
+
+\vfill
+\begin{tabular}{@{}ll@{}}
+\textbf{Autorzy:}    & Natalia Polańska (272567) \\
+                     & Michał Pawlik (272566) \\[4pt]
+\textbf{Prowadzący:} & \douzup{prowadzący, termin zajęć} \\
+\end{tabular}
+
+\vspace{1.5cm}
+{\small Wrocław, listopad 2026\par}
+\end{titlepage}
+
+% ============================================
+\section{Cel i zakres zadania}
+Celem projektu jest rozproszona baza danych dla sieci dwóch sklepów wraz
+z aplikacją dla pracowników. Wrocław korzysta z bazy Oracle, a Warszawa
+z SQL Servera. Serwery działają na dwóch komputerach połączonych siecią Tailscale.
+Każdy sklep ma w swojej bazie własne stany, ceny, zamówienia i rezerwacje.
+Wspólny katalog produktów prowadzi Wrocław, a Warszawa ma jego kopię.
+
+% ============================================
+\section{Funkcjonalny opis działania systemu}
+Pracownik każdego sklepu może:
+\begin{itemize}
+  \item sprawdzić ceny i dostępność produktu w obu sklepach,
+  \item sprzedać towar z własnego magazynu,
+  \item zarezerwować towar dla klienta, także w drugim sklepie, oraz wydać lub anulować rezerwację,
+  \item przyjąć towar, zmienić cenę i przekazać towar do drugiego sklepu,
+  \item wygenerować raport dzienny sprzedaży całej sieci.
+\end{itemize}
+Katalog produktów edytuje się tylko we Wrocławiu; Warszawa pobiera jego kopię.
+Nie można sprzedać ani zarezerwować więcej sztuk, niż jest dostępnych.
+Gdy jeden serwer nie działa, drugi sklep pracuje dalej.
+
+% ============================================
+\section{Przyjęte założenia}
+\begin{itemize}
+  \item \textbf{Klient:} aplikacja webowa w Pythonie (Streamlit), wspólna dla obu
+        sklepów. Łączy się z każdą bazą osobno.
+  \item \textbf{Bazy:} Oracle AI Database 26ai Free (Wrocław) i SQL Server 2022 Developer
+        (Warszawa). Edycja Developer ma wszystkie funkcje edycji Enterprise.
+  \item \textbf{Fragmentacja pozioma:} stany, zamówienia i rezerwacje są przechowywane
+        w bazie swojego sklepu. Pozycje zamówień leżą razem z zamówieniem
+        (fragmentacja pochodna).
+  \item \textbf{Podział danych produktu:} dane stałe (nazwa, kategoria) są w katalogu
+        wspólnym dla sieci, a dane zmienne (cena, liczba sztuk) w tabeli
+        \texttt{stany\_magazynowe} każdego sklepu. Dzięki temu ten sam produkt może mieć
+        w każdym sklepie inną cenę. Taki układ (tabele \texttt{kategorie}
+        i \texttt{typy\_produktow} zamiast jednej tabeli \texttt{produkty}) przyjęliśmy
+        po uwagach prowadzącego do konspektu.
+  \item \textbf{Replikacja:} katalog jest kopiowany z Oracle do SQL Servera co 5 minut
+        albo na żądanie. Katalog można zmieniać tylko w Oracle, a kopia w SQL Serverze
+        jest dla aplikacji tylko do odczytu. Jedno miejsce zmian wyklucza konflikty,
+        np. dwa różne produkty o tym samym identyfikatorze.
+  \item \textbf{Linked Server:} SQL Server odczytuje dane z Oracle. Służy do replikacji,
+        widoków globalnych (dane obu sklepów w jednym widoku) i raportu dziennego.
+  \item \textbf{Transakcje:} każda operacja jest lokalną transakcją w jednej bazie.
+        Przekazanie towaru zmienia dwie bazy, więc w razie błędu jest cofane
+        operacją kompensującą.
+\end{itemize}
+
+% ============================================
+\section{Opis implementacji baz danych}
+
+\subsection{Struktura systemu}
+\begin{center}
+\begin{tikzpicture}
+  \node[blok, fill=akcent!18] (app) {\textbf{Aplikacja Python (Streamlit)}};
+  \node[blok, below left=1.3cm and -0.4cm of app] (ora)
+    {\textbf{Oracle -- Wrocław}\\ \footnotesize katalog główny, stany,\\ \footnotesize zamówienia, rezerwacje};
+  \node[blok, below right=1.3cm and -0.4cm of app] (mss)
+    {\textbf{SQL Server -- Warszawa}\\ \footnotesize kopia katalogu, stany, zamówienia,\\ \footnotesize rezerwacje, raporty};
+  \draw[rel, {Latex}-{Latex}] (app.south west) ++(0.6,0) -- (ora.north);
+  \draw[rel, {Latex}-{Latex}] (app.south east) ++(-0.6,0) -- (mss.north);
+  \draw[rel, dashed, -{Latex}] (mss.west) -- (ora.east)
+    node[midway, above, krt] {Linked Server};
+  \node[draw=gray!60, dashed, rounded corners=4pt, inner sep=6pt,
+        fit=(ora)(mss), label={[font=\scriptsize\sffamily, text=gray]below:sieć Tailscale}] {};
+\end{tikzpicture}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}
+  \node[replika] (ka) at (0,0) {\naglowek{kategorie}
+    \nodepart{two} id\_kategorii \pk\\ nazwa};
+  \node[replika] (ty) at (4.2,0) {\naglowek{typy\_produktow}
+    \nodepart{two} id\_produktu \pk\\ nazwa\\ id\_kategorii \fk\\ opis\\ aktywny};
+  \node[encja] (st) at (8.4,0) {\naglowek{stany\_magazynowe}
+    \nodepart{two} id\_produktu \pkfk\\ sklep\\ cena\\ ilosc\_dostepna\\ ilosc\_zarezerwowana\\ data\_modyfikacji};
+  \node[encja] (re) at (0,-3.3) {\naglowek{rezerwacje}
+    \nodepart{two} id\_rezerwacji \pk\\ sklep\\ sklep\_zlecajacy\\ klient\\ id\_produktu \fk\\ ilosc\\ status\\ data\_utworzenia};
+  \node[encja] (po) at (4.2,-3.3) {\naglowek{pozycje\_zamowien}
+    \nodepart{two} id\_zamowienia \pkfk\\ id\_produktu \pkfk\\ ilosc\\ cena\_jednostkowa};
+  \node[encja] (za) at (8.4,-3.3) {\naglowek{zamowienia}
+    \nodepart{two} id\_zamowienia \pk\\ sklep\\ data\_zamowienia\\ status\\ wartosc};
+  \node[encja, dashed] (ra) at (12.6,0) {\naglowek{raporty\_dzienne}
+    \nodepart{two} data\_raportu \pk\\ sklep \pk\\ liczba\_zamowien\\ suma\_sprzedazy};
+
+  \draw[rel] (ka.east |- ka.text split) -- (ty.west |- ka.text split)
+    node[krt, pos=0.1, above] {1} node[krt, pos=0.85, above] {N};
+  \draw[rel] (ty.east |- st.text split) -- (st.west |- st.text split)
+    node[krt, pos=0.1, above] {1} node[krt, pos=0.8, above] {0..1};
+  \draw[rel] (ty.south) -- (po.north)
+    node[krt, pos=0.12, right] {1} node[krt, pos=0.88, right] {N};
+  \draw[rel] (ty.south west) -- (re.north east)
+    node[krt, pos=0.08, left] {1} node[krt, pos=0.92, above right] {N};
+  \draw[rel] (za.west |- po.text split) -- (po.east |- po.text split)
+    node[krt, pos=0.1, above] {1} node[krt, pos=0.85, above] {N};
+\end{tikzpicture}
+\end{center}
+{\small Ciemny nagłówek -- tabela fragmentowana (każdy sklep ma własne dane);
+jasny -- tabela replikowana z Oracle; linia przerywana -- tabela tylko w SQL Serverze.
+Oba sklepy mają ten sam układ tabel.\par}
+
+\subsection{Połączenie Oracle i SQL Servera}
+Oba serwery pracują na osobnych laptopach. Połączenie przygotowano w kolejnych krokach,
+a każdy z nich sprawdzano przed przejściem do następnego.
+
+\begin{enumerate}
+  \item \textbf{Sieć Tailscale.} Oba laptopy zalogowano do tej samej prywatnej sieci
+        Tailscale. Każdy dostał stały adres z puli \texttt{100.x.y.z}, a wygasanie
+        kluczy wyłączono, żeby połączenie nie przerwało się w trakcie prezentacji.
+        Komputery widzą się tak, jakby były w jednej sieci lokalnej, niezależnie
+        od tego, gdzie się znajdują.
+  \item \textbf{Oracle dostępny z sieci.} Domyślnie listener Oracle nasłuchiwał tylko
+        na \texttt{127.0.0.1}. W pliku \texttt{listener.ora} dopisano adres Tailscale,
+        dodano regułę zapory dla portu 1521 i zrestartowano listener. Polecenie
+        \texttt{lsnrctl status} potwierdziło oba adresy i usługę \texttt{freepdb1}.
+  \item \textbf{SQL Server dostępny z sieci.} W SQL Server Configuration Manager
+        włączono protokół TCP/IP na porcie 1433, dodano regułę zapory i włączono
+        logowanie mieszane (Windows i SQL Server), potrzebne dla loginu aplikacji.
+  \item \textbf{Test portów.} Przed uruchomieniem baz sprawdzono samą sieć poleceniem
+        \texttt{Test-NetConnection} w obie strony (porty 1521 i 1433). Zwykły
+        \texttt{ping} nie jest tu miarodajny, bo zapora często go blokuje.
+  \item \textbf{Linked Server.} Na laptopie z SQL Serverem zainstalowano 64-bitowy
+        sterownik Oracle Provider for OLE DB (pakiet ODAC) i utworzono Linked Server
+        \texttt{ORACLE\_WRO}, wskazujący adres Tailscale Wrocławia i bazę
+        \texttt{FREEPDB1}. Wyłączono w nim przenoszenie transakcji na serwer zdalny,
+        żeby SQL Server nie próbował tworzyć transakcji rozproszonej (MSDTC).
+  \item \textbf{Pierwsza replikacja.} Procedura \texttt{sp\_synchronizuj\_katalog}
+        skopiowała kategorie i typy produktów z tymi samymi identyfikatorami co w Oracle
+        (w kopii klucze nie są generowane automatycznie). Dopiero potem wstawiono stany
+        magazynowe Warszawy, celowo z innymi cenami niż we Wrocławiu.
+  \item \textbf{Aplikacja na obu stanowiskach.} Oba laptopy uruchamiają ten sam kod.
+        Różnią się tylko plikiem \texttt{.env} (sklep stanowiska, adresy i hasła), który
+        nie trafia do repozytorium. Do połączenia z SQL Serverem potrzebny jest sterownik
+        ODBC Driver 18.
+\end{enumerate}
+
+\subsection{Replikacja katalogu}
+Procedura replikacji działa w dwóch etapach. Najpierw pobiera aktualny katalog z Oracle
+do tabel tymczasowych, poza transakcją. Następnie w jednej lokalnej transakcji nanosi
+zmiany na kopię instrukcją \texttt{MERGE}: dodaje nowe produkty, aktualizuje zmienione,
+a produkty usunięte w Oracle oznacza jako nieaktywne zamiast je kasować (mogą być do nich
+zamówienia). Jeśli Oracle nie odpowiada, błąd pojawia się już w pierwszym etapie i kopia
+zostaje nienaruszona, a Warszawa pracuje na ostatniej pobranej wersji. Każde uruchomienie
+zapisuje się w tabeli \texttt{log\_synchronizacji}.
+
+Login, którym aplikacja łączy się z SQL Serverem, może czytać i zapisywać dane sklepu
+oraz uruchamiać procedury, ale ma zabronione (\texttt{DENY}) zmiany w kopii katalogu.
+
+\subsection{Sposób uruchamiania i testowania}
+Tabele tworzą skrypty z katalogu \texttt{sql}. Aplikację uruchamia się poleceniem
+\texttt{streamlit run app/main.py}, a sklep stanowiska ustawia się w pliku \texttt{.env}.
+Skrypt \texttt{app/test\_systemu.py} automatycznie sprawdza połączenia, tabele,
+fragmentację, replikację, widoki globalne, operacje aplikacji i zachowanie przy
+awarii serwera. Skrypt \texttt{app/test\_wspolbieznosc.py} sprawdza, że przy dwóch
+jednoczesnych rezerwacjach ostatniej sztuki udaje się tylko jedna.
+
+Scenariusze sprawdzane ręcznie w aplikacji:
+
+{\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.33\textwidth}X@{}}
+\toprule
+\textbf{Działanie} & \textbf{Oczekiwany wynik} \\
+\midrule
+Zmiana nazwy produktu w Oracle i synchronizacja & nowa nazwa w kopii w SQL Serverze, polskie znaki poprawne \\
+Dodanie produktu w katalogu we Wrocławiu & produkt w Oracle; w Warszawie po pobraniu katalogu \\
+Przyjęcie nowego produktu z ceną & produkt pojawia się w stanach sklepu \\
+Podgląd produktów w sieci & ceny i ilości z obu sklepów w jednej tabeli \\
+Rezerwacja towaru z drugiego sklepu & rezerwacja zapisana w bazie sklepu z towarem i widoczna w obu stanowiskach \\
+Sprzedaż & nowe zamówienie we własnej bazie, stan zmniejszony \\
+Zatrzymanie jednego serwera lub Tailscale & węzeł oznaczony jako niedostępny, drugi sklep działa normalnie \\
+\bottomrule
+\end{tabularx}\par}
+
+\douzup{wyniki testów i zrzuty ekranu}
+
+% ============================================
+\section{Opis implementacji aplikacji dostępowej}
+Aplikacja składa się z czterech plików: \texttt{config.py} (ustawienia),
+\texttt{bazy.py} (połączenia z bazami), \texttt{operacje.py} (sprzedaż, rezerwacje,
+magazyn, katalog) i \texttt{main.py} (interfejs). Zapytania SQL są pisane raz
+i działają w obu bazach. Gdy jedna baza nie odpowiada, aplikacja pokazuje
+ostrzeżenie i nadal wyświetla dane z drugiej.
+
+% ============================================
+\section{Podsumowanie}
+Zrealizowano rozproszoną bazę danych złożoną z Oracle i SQL Servera na dwóch
+komputerach, wraz z aplikacją dostępową. Wykorzystano fragmentację poziomą,
+replikację, Linked Server, widoki globalne i obsługę awarii. Najważniejszy wniosek:
+dane rozmieszczono tak, by prawie każda operacja dotyczyła jednej bazy, bo Oracle
+i SQL Server nie mają wspólnych transakcji. Najwięcej pracy wymagało samo połączenie
+heterogenicznych serwerów: udostępnienie Oracle w sieci, sterownik OLE DB dla Linked
+Servera i zgodność typów danych między Oracle a SQL Serverem. Pomogło sprawdzanie
+każdego etapu osobno (najpierw sieć, potem bazy, na końcu replikacja).
+
+\douzup{wnioski z pomiaru czasu zapytań lokalnych i przez Linked Server}
+
+% ============================================
+\begin{thebibliography}{9}\small
+\bibitem{ozsu} M. T. Özsu, P. Valduriez, \emph{Principles of Distributed Database Systems}, wyd. 4, Springer, 2020.
+\bibitem{wyklad} \douzup{materiały do wykładu}
+\bibitem{mslinked} Microsoft, \emph{Linked Servers (Database Engine)},
+  \url{https://learn.microsoft.com/sql/relational-databases/linked-servers/linked-servers-database-engine}
+\bibitem{oradoc} Oracle, \emph{Oracle Database Documentation}, \url{https://docs.oracle.com/en/database/}
+\end{thebibliography}
+
+\end{document}
